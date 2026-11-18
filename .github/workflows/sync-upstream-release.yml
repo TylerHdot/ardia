@@ -1,0 +1,79 @@
+name: Sync Upstream Release
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Specific upstream stable version to sync (e.g. 0.2.46); leave empty for latest stable release
+        type: string
+        required: false
+        default: ''
+      force:
+        description: Rebuild and republish even if this version is already released on this fork
+        type: boolean
+        required: false
+        default: false
+
+concurrency:
+  group: sync-upstream-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.SYNC_TOKEN || github.token }}
+          persist-credentials: true
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24
+      - name: Sync latest upstream full release and trigger build
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_TOKEN || github.token }}
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_FORCE: ${{ inputs.force }}
+        run: |
+          set -euo pipefail
+          git remote add upstream https://github.com/ardia-browser/ardia.git 2>/dev/null \
+            || git remote set-url upstream https://github.com/ardia-browser/ardia.git
+          git fetch upstream --tags --force
+          if [ -n "$INPUT_VERSION" ]; then
+            TAG="v${INPUT_VERSION#v}"
+          else
+            TAG="$(gh api repos/ardia-browser/ardia/releases/latest --jq .tag_name)"
+          fi
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            echo "::error::Tag '$TAG' is not a full stable release (v<major>.<minor>.<patch>)"
+            exit 1
+          }
+          VERSION="${TAG#v}"
+          if [ "$INPUT_FORCE" != "true" ] && gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $TAG is already published on $GITHUB_REPOSITORY; nothing to do."
+            exit 0
+          fi
+          cp -R .github/workflows "$RUNNER_TEMP/fork-workflows"
+          cp scripts/apply-fork-patches.mjs "$RUNNER_TEMP/apply-fork-patches.mjs"
+          git checkout -B main "refs/tags/$TAG"
+          rm -rf .github/workflows
+          cp -R "$RUNNER_TEMP/fork-workflows" .github/workflows
+          cp "$RUNNER_TEMP/apply-fork-patches.mjs" scripts/apply-fork-patches.mjs
+          node scripts/apply-fork-patches.mjs
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m "Sync upstream release $TAG with focus fix and fork updater"
+          fi
+          git push -f origin main
+          gh workflow run release.yml -R "$GITHUB_REPOSITORY" -f version="$VERSION" -f dry_run=false

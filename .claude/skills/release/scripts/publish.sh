@@ -47,24 +47,24 @@ work="$(mktemp -d "${TMPDIR:-/tmp}/ac-publish.XXXXXX")"
 trap 'release_lock; rm -rf "$work"' EXIT
 trap 'exit 130' INT TERM HUP
 take_lock "$version" "$dry" "$break_lock"
-stable_tag="$(latest_stable_tag)"
+stable_tag="$(latest_stable_tag || true)"
 
 built="$dist/appcast.built.xml"
 [ -f "$built" ] || cp "$feed" "$built"
 merged="$feed"
 [ "$dry" = 1 ] && merged="$work/appcast.xml"
-if download_live_feed "$stable_tag" "$work/live"; then
+if [ -n "$stable_tag" ] && download_live_feed "$stable_tag" "$work/live"; then
   appcast merge "$work/live/appcast.xml" "$built" "$version" "$merged"
+  appcast check-above "$merged" "$version"
+  if [ "$channel" = stable ]; then
+    latest_version="${stable_tag#v}"
+    [ "$version" != "$latest_version" ] && [ "$(printf '%s\n%s\n' "$latest_version" "$version" | sort -V | tail -1)" = "$version" ] \
+      || die "$version isn't above the latest stable release ($latest_version): publishing it as latest would move every download and feed backward"
+    echo "PASS  $version is above the latest stable release ($latest_version)"
+  fi
 else
-  echo "note: $stable_tag has no appcast.xml yet: $version starts it"
+  echo "note: ${stable_tag:-this repo} has no appcast.xml yet: $version starts it"
   cp "$built" "$merged"
-fi
-appcast check-above "$merged" "$version"
-if [ "$channel" = stable ]; then
-  latest_version="${stable_tag#v}"
-  [ "$version" != "$latest_version" ] && [ "$(printf '%s\n%s\n' "$latest_version" "$version" | sort -V | tail -1)" = "$version" ] \
-    || die "$version isn't above the latest stable release ($latest_version): publishing it as latest would move every download and feed backward"
-  echo "PASS  $version is above the latest stable release ($latest_version)"
 fi
 
 if [ "$channel" = nightly ]; then
@@ -82,13 +82,13 @@ if [ "$channel" = nightly ]; then
   cp -c "$dmg" "$work/Ardia-Nightly.dmg"
   run gh release upload nightly -R "$REPO" --clobber "$work/Ardia-Nightly.dmg"
   run gh release edit nightly -R "$REPO" --notes "$nightly_notes"
-  run gh release upload "$stable_tag" -R "$REPO" --clobber "$merged"
+  [ -z "$stable_tag" ] || run gh release upload "$stable_tag" -R "$REPO" --clobber "$merged"
 fi
 
 tap() { [ "${PUBLISH_TAP:-1}" = 0 ] && { echo "note: the Homebrew tap is left alone (PUBLISH_TAP=0): run update-tap.sh $version"; return 0; }; "$here/update-tap.sh" "$@"; }
 [ "$dry" = 1 ] && { tap "$version" --dry-run || true; echo "dry run: nothing published"; exit 0; }
 status=0
-for url in "$LATEST_DOWNLOAD_URL/appcast.xml" "https://ardia.dev/appcast.xml"; do
+for url in "$LATEST_DOWNLOAD_URL/appcast.xml"; do
   for _ in $(seq 1 18); do
     xml="$(curl -fsSL --max-time 20 "$url" 2>/dev/null || true)"
     grep -q "<sparkle:shortVersionString>$version<" <<<"$xml" && break

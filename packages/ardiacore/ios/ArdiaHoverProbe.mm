@@ -261,8 +261,8 @@ bool OtherArdiaWindowActive(NSWindow *window) {
 bool SafeToHeal(NSWindow *window, const HoverCheck &check, HoverTrigger trigger) {
   if (!window.isVisible || !window.isOnActiveSpace || !check.activation.inFront() || PanelOrSheetOpen()) return false;
   if (check.menuActive || MenuShown(window) || FullScreenMoving()) return false;
-  if (check.reason == HoverReason::halfActive) return trigger == HoverTrigger::click && check.key != FocusWindowKind::popup;
-  return check.reason == HoverReason::notKeyOrMain && check.activation.appActive && Unseen(check.key) && !OtherArdiaWindowActive(window);
+  if (check.reason == HoverReason::halfActive) return check.key != FocusWindowKind::popup;
+  return check.reason == HoverReason::notKeyOrMain && check.overPage && check.key != FocusWindowKind::popup && !OtherArdiaWindowActive(window);
 }
 
 struct HoverEpisode {
@@ -285,7 +285,7 @@ double gLastMoveCheck = 0;
 id gHoverMonitor;
 bool gHoverWatchInBackground = false;
 NSMutableArray<NSDictionary *> *gDevHoverEvents;
-constexpr double kMoveCheckEvery = 2;
+constexpr double kMoveCheckEvery = 0.25;
 constexpr double kHealRecheckAfter = 0.3;
 constexpr NSUInteger kDevHoverEventsKept = 16;
 
@@ -398,7 +398,7 @@ void HandleHoverCheck(NSWindow *window, NSPoint point, HoverTrigger trigger) {
     return;
   }
   if (!gEpisode.open) {
-    if (trigger == HoverTrigger::move && (gPendingReason != check.reason || gPendingWindow != window)) {
+    if (trigger == HoverTrigger::move && check.reason != HoverReason::halfActive && (gPendingReason != check.reason || gPendingWindow != window)) {
       gPendingReason = check.reason;
       gPendingWindow = window;
       return;

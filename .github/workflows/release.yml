@@ -59,7 +59,7 @@ jobs:
 
   checks:
     needs: preflight
-    runs-on: xcode-27
+    runs-on: macos-15
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -84,7 +84,7 @@ jobs:
 
   build:
     needs: preflight
-    runs-on: xcode-27
+    runs-on: macos-15
     timeout-minutes: 120
     env:
       CAS_PATH: ${{ github.workspace }}/.xcode-cas
@@ -202,7 +202,7 @@ jobs:
 
   sign:
     needs: [preflight, build]
-    runs-on: xcode-27
+    runs-on: macos-15
     timeout-minutes: 150
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -239,7 +239,18 @@ jobs:
           NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
           NOTARY_ISSUER: ${{ secrets.NOTARY_ISSUER }}
           ALLOW_MISSING_NOTARY: ${{ inputs.dry_run && '1' || '0' }}
-        run: .github/release/signing.sh setup
+        run: |
+          if [ -n "${MACOS_CERTIFICATE_P12:-}" ]; then
+            .github/release/signing.sh setup
+          else
+            [ -n "${SPARKLE_ED_PRIVATE_KEY:-}" ] || { echo "::error::missing SPARKLE_ED_PRIVATE_KEY"; exit 1; }
+            sparkle="$RUNNER_TEMP/sparkle-key"
+            (umask 077 && printf '%s' "$SPARKLE_ED_PRIVATE_KEY" > "$sparkle")
+            {
+              echo "SPARKLE_KEY_FILE=$sparkle"
+              echo "ADHOC_SIGN=1"
+            } >> "$GITHUB_ENV"
+          fi
       - name: Sign, notarize, package
         env:
           NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
@@ -257,7 +268,7 @@ jobs:
         run: |
           secrets="$RUNNER_TEMP/release-signing"
           if [ -f "$secrets/release.keychain-db" ]; then security delete-keychain "$secrets/release.keychain-db" || true; fi
-          rm -rf "$secrets"
+          rm -rf "$secrets" "$RUNNER_TEMP/sparkle-key"
           printf '%s=\n' RELEASE_PROVISIONING_PROFILE SPARKLE_KEY_FILE NOTARY_KEY >> "$GITHUB_ENV"
           [ ! -e "$secrets" ] || { echo "::error::couldn't remove $secrets"; exit 1; }
           if security find-identity -v -p codesigning | grep -q 'Developer ID Application: .*(U5L5T3NGVV)'; then
@@ -305,6 +316,7 @@ jobs:
 
   publish:
     needs: [preflight, checks, sign]
+    if: ${{ !cancelled() && needs.checks.result == 'success' && needs.sign.result == 'success' }}
     runs-on: macos-15
     timeout-minutes: 30
     permissions:
@@ -320,8 +332,8 @@ jobs:
       - name: Tag
         if: ${{ !inputs.dry_run }}
         run: |
-          git tag "v$VERSION" "$GITHUB_SHA"
-          git push origin "refs/tags/v$VERSION"
+          git tag -f "v$VERSION" "$GITHUB_SHA"
+          git push -f origin "refs/tags/v$VERSION"
       - name: Publish
         env:
           TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}

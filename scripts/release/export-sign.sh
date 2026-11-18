@@ -10,7 +10,12 @@ provisioning_profile="${5:-}"
 . "$(dirname "$0")/lib.sh"
 app="$dist/export/Ardia.app"
 
-if [ -n "$provisioning_profile" ]; then
+if [ "$identity" = "-" ]; then
+  echo "==> Export (ad hoc)"
+  rm -rf "$app"
+  mkdir -p "$(dirname "$app")"
+  ditto "$archive/Products/Applications/Ardia.app" "$app"
+elif [ -n "$provisioning_profile" ]; then
   app_entitlements="$macos/Ardia-macOS/Ardia.entitlements"
   grants_browser_passkeys "$provisioning_profile" && app_entitlements="$macos/Ardia-macOS/Ardia-ICloudPasskeys.entitlements"
   echo "==> Export (Developer ID, $(basename "$provisioning_profile"), $(basename "$app_entitlements"))"
@@ -56,6 +61,15 @@ sign_as "$identity" --options restrict,library,kill,runtime "$fwv/Helpers/app_mo
 [ -e "$fwv/Helpers/web_app_shortcut_copier" ] && sign_as "$identity" --options restrict,library,kill,runtime \
   --identifier com.ardia.browser.web_app_shortcut_copier "$fwv/Helpers/web_app_shortcut_copier"
 sign_as "$identity" "$fw"
-[ -d "$app/Contents/Frameworks/hermes.framework" ] \
-  && sign_as "$identity" --preserve-metadata=identifier,entitlements,flags,runtime "$app/Contents/Frameworks/hermes.framework"
-sign_as "$identity" --preserve-metadata=entitlements,requirements,flags,runtime "$app"
+if [ "$identity" = "-" ]; then
+  while IFS= read -r -d '' code; do
+    sign_as "-" "$code"
+  done < <(find "$app/Contents" -depth -not -path "*/Chromium Framework.framework/*" -not -name "Chromium Framework.framework" \
+    \( -type d \( -name "*.xpc" -o -name "*.app" -o -name "*.appex" -o -name "*.framework" -o -name "*.plugin" \) \
+    -o -type f \( -name "*.dylib" -o -path "*.framework/Versions/*/Autoupdate" \) \) -print0)
+  sign_as "-" "$app"
+else
+  [ -d "$app/Contents/Frameworks/hermes.framework" ] \
+    && sign_as "$identity" --preserve-metadata=identifier,entitlements,flags,runtime "$app/Contents/Frameworks/hermes.framework"
+  sign_as "$identity" --preserve-metadata=entitlements,requirements,flags,runtime "$app"
+fi

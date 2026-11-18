@@ -363,7 +363,9 @@ bool UserEvent() {
 }
 
 bool Allow(NSString *what) {
-  if (!Background() && (NSApp.isActive || UserEvent())) return true;
+  NSRunningApplication *me = NSRunningApplication.currentApplication;
+  bool frontmost = me.isActive || [NSWorkspace.sharedWorkspace.frontmostApplication isEqual:me];
+  if (!Background() && (NSApp.isActive || frontmost || UserEvent())) return true;
   NSArray<NSString *> *stack = NSThread.callStackSymbols;
   if (Background() || FromChromium(stack)) {
     Log([@"blocked " stringByAppendingString:what], stack);
