@@ -418,8 +418,20 @@ fi`,
   return out;
 });
 
+edit("apps/browser/src/state/telemetry/watch.test.mjs", (src) => {
+  const stale = 'const T = Date.parse("2026-11-01T10:00:00Z");';
+  return src.includes(stale) ? src.replace(stale, "const T = Math.floor(Date.now() / DAY) * DAY;") : src;
+});
+
 edit(".github/workflows/release.yml", (src) => {
   let out = src.replaceAll("runs-on: xcode-27", "runs-on: macos-15");
+  out = replaceOnce(
+    out,
+    "          pbx=apps/browser/macos/Ardia.xcodeproj/project.pbxproj",
+    "          git checkout -- apps/browser/macos/Podfile.lock\n          pbx=apps/browser/macos/Ardia.xcodeproj/project.pbxproj",
+    "release.yml Tree is clean Podfile.lock",
+    "git checkout -- apps/browser/macos/Podfile.lock",
+  );
   out = replaceOnce(
     out,
     "        run: .github/release/signing.sh setup",

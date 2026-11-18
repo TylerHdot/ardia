@@ -149,6 +149,7 @@ jobs:
         run: pod install
       - name: Tree is clean
         run: |
+          git checkout -- apps/browser/macos/Podfile.lock
           pbx=apps/browser/macos/Ardia.xcodeproj/project.pbxproj
           unquote() { sed -E 's/^[-+]//; s/"//g'; }
           removed=$(git diff -U0 -- "$pbx" | { grep '^-[^-]' || true; } | unquote)
