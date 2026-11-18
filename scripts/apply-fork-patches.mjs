@@ -539,3 +539,60 @@ edit("packages/shell/ios/SharePicker.swift", (src) => {
   );
   return out;
 });
+
+edit("packages/shaders/ios/ThemeGradient.swift", (src) =>
+  replaceOnce(
+    src,
+    `    stride(from: 0, to: flat.count - 3, by: 4).prefix(3).map {
+      SIMD4(Float(flat[$0]), Float(flat[$0 + 1]), Float(flat[$0 + 2]), Float(flat[$0 + 3]))
+    }`,
+    `    stride(from: 0, to: flat.count - 3, by: 4).prefix(3).map { (i: Int) -> SIMD4<Float> in
+      SIMD4<Float>(Float(flat[i]), Float(flat[i + 1]), Float(flat[i + 2]), Float(flat[i + 3]))
+    }`,
+    "ThemeGradient.swift parse",
+    "(i: Int) -> SIMD4<Float> in",
+  ),
+);
+
+edit("packages/import/ios/Core/ChromiumFavicons.swift", (src) => {
+  if (src.includes("let favorites: [String] = result.favorites.map(\\.url)")) return src;
+  const v46 = `    return result.favorites.map(\\.url)
+      + result.spaces.flatMap { $0.pinned.flatMap(links) + $0.tabs.map(\\.url) }
+      + result.tabs.map(\\.url)
+      + toolbar`;
+  if (src.includes(v46)) {
+    return src.replace(
+      v46,
+      `    let favorites: [String] = result.favorites.map(\\.url)
+    let spaces: [String] = result.spaces.flatMap { space -> [String] in
+      let pinned: [String] = space.pinned.flatMap(links)
+      let tabs: [String] = space.tabs.map(\\.url)
+      return pinned + tabs
+    }
+    let tabs: [String] = result.tabs.map(\\.url)
+    return favorites + spaces + tabs + toolbar`,
+    );
+  }
+  const v47 = `    return result.favorites.map(\\.url)
+      + result.spaces.flatMap {
+        $0.pinned.flatMap(links) + $0.tabs.map(\\.url) + ($0.openGroups ?? []).flatMap(links) + ($0.favorites ?? []).map(\\.url)
+      }
+      + result.tabs.map(\\.url)
+      + toolbar`;
+  if (src.includes(v47)) {
+    return src.replace(
+      v47,
+      `    let favorites: [String] = result.favorites.map(\\.url)
+    let spaces: [String] = result.spaces.flatMap { space -> [String] in
+      let pinned: [String] = space.pinned.flatMap(links)
+      let tabs: [String] = space.tabs.map(\\.url)
+      let groups: [String] = (space.openGroups ?? []).flatMap(links)
+      let spaceFavorites: [String] = (space.favorites ?? []).map(\\.url)
+      return pinned + tabs + groups + spaceFavorites
+    }
+    let tabs: [String] = result.tabs.map(\\.url)
+    return favorites + spaces + tabs + toolbar`,
+    );
+  }
+  throw new Error("missing target for ChromiumFavicons.swift pages()");
+});
