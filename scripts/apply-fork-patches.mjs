@@ -480,3 +480,62 @@ edit(".github/workflows/release.yml", (src) => {
   }
   return out;
 });
+
+edit("packages/shell/ios/MenusModule.swift", (src) => {
+  let out = replaceOnce(
+    src,
+    `      if let symbol = item.symbol {
+        entry.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+        if #available(macOS 27.0, *) { entry.preferredImageVisibility = .visible }
+      } else if let hex = item.swatch, let light = RGBA(hex: hex)?.srgb {
+        let dark = item.swatchDark.flatMap { RGBA(hex: $0)?.srgb } ?? light
+        entry.image = light.alphaComponent == 0
+          ? emptySwatch() : swatch(NSColor(name: nil) { $0.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light })
+        if #available(macOS 27.0, *) { entry.preferredImageVisibility = .visible }
+      }`,
+    `      if let symbol = item.symbol {
+        entry.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+        #if compiler(>=6.4)
+        if #available(macOS 27.0, *) { entry.preferredImageVisibility = .visible }
+        #endif
+      } else if let hex = item.swatch, let light = RGBA(hex: hex)?.srgb {
+        let dark = item.swatchDark.flatMap { RGBA(hex: $0)?.srgb } ?? light
+        entry.image = light.alphaComponent == 0
+          ? emptySwatch() : swatch(NSColor(name: nil) { $0.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light })
+        #if compiler(>=6.4)
+        if #available(macOS 27.0, *) { entry.preferredImageVisibility = .visible }
+        #endif
+      }`,
+    "MenusModule.swift preferredImageVisibility",
+    "#if compiler(>=6.4)",
+  );
+  return out;
+});
+
+edit("packages/shell/ios/SharePicker.swift", (src) => {
+  let out = replaceOnce(
+    src,
+    `      item.image = service.image
+      if #available(macOS 27.0, *) { item.preferredImageVisibility = .visible }
+      item.representedObject = choice(service.title)`,
+    `      item.image = service.image
+      #if compiler(>=6.4)
+      if #available(macOS 27.0, *) { item.preferredImageVisibility = .visible }
+      #endif
+      item.representedObject = choice(service.title)`,
+    "SharePicker.swift item.preferredImageVisibility",
+    "#if compiler(>=6.4)\n      if #available(macOS 27.0, *) { item.preferredImageVisibility = .visible }",
+  );
+  out = replaceOnce(
+    out,
+    `    if more.image == nil { more.image = NSImage(systemSymbolName: "ellipsis.circle", accessibilityDescription: nil) }
+    if #available(macOS 27.0, *) { more.preferredImageVisibility = .visible }`,
+    `    if more.image == nil { more.image = NSImage(systemSymbolName: "ellipsis.circle", accessibilityDescription: nil) }
+    #if compiler(>=6.4)
+    if #available(macOS 27.0, *) { more.preferredImageVisibility = .visible }
+    #endif`,
+    "SharePicker.swift more.preferredImageVisibility",
+    "#if compiler(>=6.4)\n    if #available(macOS 27.0, *) { more.preferredImageVisibility = .visible }",
+  );
+  return out;
+});
