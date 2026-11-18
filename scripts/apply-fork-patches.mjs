@@ -424,7 +424,7 @@ edit("apps/browser/src/state/telemetry/watch.test.mjs", (src) => {
 });
 
 edit(".github/workflows/release.yml", (src) => {
-  let out = src.replaceAll("runs-on: xcode-27", "runs-on: macos-15");
+  let out = src.replaceAll("runs-on: xcode-27", "runs-on: macos-26").replaceAll("runs-on: macos-15", "runs-on: macos-26");
   out = replaceOnce(
     out,
     "          pbx=apps/browser/macos/Ardia.xcodeproj/project.pbxproj",

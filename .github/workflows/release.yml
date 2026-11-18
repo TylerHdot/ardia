@@ -59,7 +59,7 @@ jobs:
 
   checks:
     needs: preflight
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -84,7 +84,7 @@ jobs:
 
   build:
     needs: preflight
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 120
     env:
       CAS_PATH: ${{ github.workspace }}/.xcode-cas
@@ -203,7 +203,7 @@ jobs:
 
   sign:
     needs: [preflight, build]
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 150
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -318,7 +318,7 @@ jobs:
   publish:
     needs: [preflight, checks, sign]
     if: ${{ !cancelled() && needs.checks.result == 'success' && needs.sign.result == 'success' }}
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 30
     permissions:
       contents: write
