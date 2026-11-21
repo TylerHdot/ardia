@@ -668,3 +668,36 @@ edit("packages/import/ios/Core/ChromiumFavicons.swift", (src) => {
   }
   throw new Error("missing target for ChromiumFavicons.swift pages()");
 });
+
+edit("packages/shell/plugin-tests/PluginProcessTreeTests.swift", (src) => {
+  let out = replaceOnce(
+    src,
+    '    let argv = ["/bin/sh", "-c", helperScript, "helper", script, marker].map { strdup($0) } + [nil]',
+    '    let args: [String] = ["/bin/sh", "-c", helperScript, "helper", script, marker]\n    let argv: [UnsafeMutablePointer<CChar>?] = args.map { strdup($0) } + [nil]',
+    "PluginProcessTreeTests.swift helper argv",
+    'let args: [String] = ["/bin/sh", "-c", helperScript',
+  );
+  out = replaceOnce(
+    out,
+    '    let argv = ["/usr/bin/python3", "-c", script, argument].map { strdup($0) } + [nil]',
+    '    let args: [String] = ["/usr/bin/python3", "-c", script, argument]\n    let argv: [UnsafeMutablePointer<CChar>?] = args.map { strdup($0) } + [nil]',
+    "PluginProcessTreeTests.swift python argv",
+    'let args: [String] = ["/usr/bin/python3", "-c", script',
+  );
+  return out;
+});
+
+edit("packages/shell/ios/FieldGlowCore/FieldGlowGeometry.swift", (src) =>
+  replaceOnce(
+    src,
+    "    return [(0, 1)] + falloff.enumerated().map { i, alpha in ((body + front * Double(i) / Double(falloff.count - 1)) / span, alpha) }",
+    `    let last = Double(falloff.count - 1)
+    let tail: [(Double, Double)] = falloff.enumerated().map { i, alpha in
+      let pos = (body + front * (Double(i) / last)) / span
+      return (pos, alpha)
+    }
+    return [(0.0, 1.0)] + tail`,
+    "FieldGlowGeometry.swift fadingPast",
+    "let last = Double(falloff.count - 1)",
+  ),
+);
