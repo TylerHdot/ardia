@@ -471,7 +471,7 @@ void StartEarlyWindow() {
       "--profile-directory=Default",
       "--js-flags=--no-memory-reducer",
   };
-  const bool mockKeychain = gScratchDataDir || !IsTeamSigned();
+  const bool mockKeychain = gScratchDataDir;
   if (mockKeychain) extra.push_back("--use-mock-keychain");
   ardia_host::PrepareStartup(gDataDirectory);
   ArdiaLaunchSequence.shared.startupPreparedAt = LaunchNowMs();
