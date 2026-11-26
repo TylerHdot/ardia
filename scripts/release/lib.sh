@@ -16,8 +16,19 @@ load_notary_auth() {
 }
 
 sign_as() {
-  local identity="$1" attempt
+  local identity="$1" attempt args=()
   shift
+  if [ "$identity" = "-" ]; then
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --options) shift 2 ;;
+        --preserve-metadata=*) shift ;;
+        *) args+=("$1"); shift ;;
+      esac
+    done
+    codesign --force --sign - "${args[@]}"
+    return 0
+  fi
   for attempt in 1 2 3 4 5; do
     codesign --force --timestamp --sign "$identity" "$@" && return 0
     echo "    signing failed (attempt $attempt), likely no timestamp from Apple; retrying" >&2

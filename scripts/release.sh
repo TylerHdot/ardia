@@ -112,7 +112,7 @@ fi
 [ "$phase" = sign ] || [[ " $(lipo -archs "$framework_src/Versions/Current/Chromium Framework" 2>/dev/null) " == *" arm64 "* ]] \
   || die "the ArdiaCore framework at $framework_src has no arm64 slice"
 if [ "$phase" = sign ]; then
-  [ -n "$provisioning_profile" ] || die "--phase sign exports the ad hoc archive --phase build made: set RELEASE_PROVISIONING_PROFILE"
+  [ "${ADHOC_SIGN:-0}" = 1 ] || [ -n "$provisioning_profile" ] || die "--phase sign exports the ad hoc archive --phase build made: set RELEASE_PROVISIONING_PROFILE"
 elif [ -n "$framework_engine" ]; then
   [ -n "${ARDIACORE_FRAMEWORK:-}" ] || die "ARDIACORE_FRAMEWORK_ENGINE names the engine key (engine/engine-key.sh) a prebuilt ARDIACORE_FRAMEWORK was built from; set both or neither"
   [ "$framework_engine" = "$("$root/engine/engine-key.sh")" ] \
@@ -126,25 +126,30 @@ engine_source=""
 if [ "$phase" != build ]; then
   engine_tree="$("$root/engine/engine-key.sh")"
   engine_release="$(awk -v t="$engine_tree" '$1 == t { print $2; exit }' "$ardiacore/prebuilt-engines.tsv")"
-  [ "$rc" = 1 ] || [ -n "$engine_release" ] \
+  [ "$rc" = 1 ] || [ "${ADHOC_SIGN:-0}" = 1 ] || [ -n "$engine_release" ] \
     || die "packages/ardiacore/prebuilt-engines.tsv lists no published engine for this engine key (${engine_tree:0:12}): publish it with scripts/publish-engine.sh, commit the table line, then release"
   case "$engine_release" in engine-*) engine_tag="$engine_release" ;; *) engine_tag="v$engine_release" ;; esac
   [ -n "$engine_release" ] \
-    && engine_source="$REPO_URL/releases/download/$engine_tag/ArdiaCore-${engine_tree:0:12}-source.tar.xz"
+    && engine_source="https://github.com/mantrakp04/ardia/releases/download/$engine_tag/ArdiaCore-${engine_tree:0:12}-source.tar.xz"
 
-  identity_name="Developer ID Application"
-  identity="$(security find-identity -v -p codesigning | awk -v n="$identity_name" 'index($0, n) { print $2; exit }')"
-  [ -n "$identity" ] || die "no $identity_name identity"
-  load_notary_auth
-  notarize=0
-  if xcrun notarytool history "${notary_auth[@]}" >/dev/null 2>&1; then
-    notarize=1
-  elif [ "${ALLOW_UNNOTARIZED:-0}" = 1 ]; then
-    echo "warning: no notarytool credentials; the build won't be notarized" >&2
+  if [ "${ADHOC_SIGN:-0}" = 1 ]; then
+    identity="-"
+    notarize=0
   else
-    echo "error: notarytool credentials are missing or invalid (scripts/.notary.env or the '${NOTARY_PROFILE:-ardia}' profile):" >&2
-    xcrun notarytool history "${notary_auth[@]}" 2>&1 | head -2 >&2
-    exit 1
+    identity_name="Developer ID Application"
+    identity="$(security find-identity -v -p codesigning | awk -v n="$identity_name" 'index($0, n) { print $2; exit }')"
+    [ -n "$identity" ] || die "no $identity_name identity"
+    load_notary_auth
+    notarize=0
+    if xcrun notarytool history "${notary_auth[@]}" >/dev/null 2>&1; then
+      notarize=1
+    elif [ "${ALLOW_UNNOTARIZED:-0}" = 1 ]; then
+      echo "warning: no notarytool credentials; the build won't be notarized" >&2
+    else
+      echo "error: notarytool credentials are missing or invalid (scripts/.notary.env or the '${NOTARY_PROFILE:-ardia}' profile):" >&2
+      xcrun notarytool history "${notary_auth[@]}" 2>&1 | head -2 >&2
+      exit 1
+    fi
   fi
 fi
 

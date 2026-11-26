@@ -255,9 +255,9 @@ bool OtherArdiaWindowActive(NSWindow *window) {
 bool SafeToHeal(NSWindow *window, const HoverCheck &check, HoverTrigger trigger) {
   if (!window.isVisible || !window.isOnActiveSpace || !check.activation.inFront() || PanelOrSheetOpen()) return false;
   if (check.menuActive || MenuShown(window) || FullScreenMoving()) return false;
-  if (check.reason == HoverReason::halfActive) return trigger == HoverTrigger::click && check.key != FocusWindowKind::popup;
+  if (check.reason == HoverReason::halfActive) return check.key != FocusWindowKind::popup;
   if (check.reason == HoverReason::responderLost) return trigger == HoverTrigger::click && check.overPage && check.windowKey;
-  return check.reason == HoverReason::notKeyOrMain && check.activation.appActive && Unseen(check.key) && !OtherArdiaWindowActive(window);
+  return check.reason == HoverReason::notKeyOrMain && check.overPage && check.key != FocusWindowKind::popup && !OtherArdiaWindowActive(window);
 }
 
 HoverEpisode gEpisode;
@@ -269,7 +269,7 @@ double gLastMoveCheck = 0;
 id gHoverMonitor;
 bool gHoverWatchInBackground = false;
 NSMutableArray<NSDictionary *> *gDevHoverEvents;
-constexpr double kMoveCheckEvery = 2;
+constexpr double kMoveCheckEvery = 0.25;
 constexpr double kHealRecheckAfter = 0.3;
 constexpr NSUInteger kDevHoverEventsKept = 16;
 
@@ -430,7 +430,7 @@ void HandleHoverCheck(NSWindow *window, NSPoint point, HoverTrigger trigger, Ard
     return;
   }
   if (!gEpisode.open) {
-    if (trigger == HoverTrigger::move && (gPendingReason != check.reason || gPendingWindow != window)) {
+    if (trigger == HoverTrigger::move && check.reason != HoverReason::halfActive && (gPendingReason != check.reason || gPendingWindow != window)) {
       gPendingReason = check.reason;
       gPendingWindow = window;
       return;
@@ -527,6 +527,25 @@ void StartHoverWatch() {
   }];
 }
 
+void HealMissedActivationOnSwitch() {
+  if (NSApp.isActive || Background()) return;
+  NSRunningApplication *me = NSRunningApplication.currentApplication;
+  if (!me.isActive || ![NSWorkspace.sharedWorkspace.frontmostApplication isEqual:me]) return;
+  if (PanelOrSheetOpen() || MenuShown(nil) || FullScreenMoving()) return;
+  ReplayMissedActivation();
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+  if (!NSApp.isActive) [NSApp activateIgnoringOtherApps:YES];
+#pragma clang diagnostic pop
+  if (NSApp.keyWindow && !Unseen(KindOf(NSApp.keyWindow))) return;
+  for (NSWindow *w in NSApp.orderedWindows) {
+    if (!IsBrowserWindow(w) || !w.isVisible || w.isMiniaturized || !w.isOnActiveSpace || !w.canBecomeKeyWindow) continue;
+    if (PreventsKey(w)) [w setValue:@NO forKey:@"preventKeyWindow"];
+    [w makeKeyAndOrderFront:nil];
+    break;
+  }
+}
+
 void EndEpisodeIfInactive() {
   if (!CurrentActivation().inFront()) CloseEpisode(@"appInactive");
 }
@@ -557,8 +576,11 @@ void WatchHover() {
     }];
   for (NSNotificationName name in @[ NSWindowDidEnterFullScreenNotification, NSWindowDidExitFullScreenNotification ])
     [center addObserverForName:name object:nil queue:nil usingBlock:^(NSNotification *note) { [FullScreenMoves() removeObjectForKey:note.object]; }];
-  [NSWorkspace.sharedWorkspace.notificationCenter addObserverForName:NSWorkspaceDidActivateApplicationNotification object:nil queue:nil
-                                                          usingBlock:^(NSNotification *) { EndEpisodeIfInactive(); }];
+  [NSWorkspace.sharedWorkspace.notificationCenter addObserverForName:NSWorkspaceDidActivateApplicationNotification object:nil queue:nil usingBlock:^(NSNotification *note) {
+    EndEpisodeIfInactive();
+    if ([note.userInfo[NSWorkspaceApplicationKey] isEqual:NSRunningApplication.currentApplication])
+      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.05 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ HealMissedActivationOnSwitch(); });
+  }];
   StartHoverWatch();
 }
 

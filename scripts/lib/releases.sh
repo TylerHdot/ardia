@@ -1,8 +1,9 @@
 REPO="mantrakp04/ardia"
+REPO="${ARDIA_RELEASE_REPO:-TylerHdot/ardia}"
 REPO_URL="https://github.com/$REPO"
 LATEST_DOWNLOAD_URL="$REPO_URL/releases/latest/download"
 NIGHTLY_DMG_URL="$REPO_URL/releases/download/nightly/Ardia-Nightly.dmg"
-RELEASE_NOTES_URL="https://ardia.dev/release-notes"
+RELEASE_NOTES_URL="https://github.com/$REPO/releases"
 APPCAST_PY="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/.claude/skills/release/scripts/appcast.py"
 
 channel_of() {
@@ -34,7 +35,7 @@ engine_uuids_name() { echo "ArdiaCore-${1#engine-}-uuids.txt"; }
 
 latest_stable_tag() {
   local tag
-  tag="$(gh release view -R "$REPO" --json tagName -q .tagName)"
+  tag="$(gh release view -R "$REPO" --json tagName -q .tagName 2>/dev/null)" || return 1
   [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
     echo "error: the latest release is $tag, not a stable one: the feed lives on the latest stable release" >&2
     return 1
